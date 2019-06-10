@@ -8,6 +8,7 @@ import time
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
 
 class ModelTrainer(object):
@@ -27,14 +28,16 @@ class ModelTrainer(object):
         self.scheduler = scheduler
         self.device = device
 
-    def train_one_epoch(self, dataloader, y_true="output"):
+    def train_one_epoch(self, dataloader, y_true="output", verbose_step=False):
         avg_loss = 0.0
         self.model.train()
-        for x_batch, y_batch in dataloader:
-            y_pred = self.model(x_batch)
+        for x_batch in tqdm(dataloader, disable=not verbose_step):
+            y_batch = x_batch[-1]
+            x_batch = x_batch[:-1]
+            y_pred = self.model(*x_batch)
             self.optimizer.zero_grad()
             if y_true == "input":
-                loss = self.loss_fn(x_batch, y_batch)
+                loss = self.loss_fn(*x_batch, y_true=y_batch)
             else:
                 loss = self.loss_fn(y_pred, y_batch)
             loss.backward()
@@ -64,7 +67,8 @@ class ModelTrainer(object):
             prediction.extend(y_pred.detach().numpy())
         return np.array(prediction)
 
-    def train(self, train_dataloader, val_dataloader=None, epochs=1, verbose=0, metrics=None, y_true="output"):
+    def train(self, train_dataloader, val_dataloader=None, epochs=1, verbose=0, metrics=None, y_true="output",
+              verbose_step=False):
         """train model
         :param train_dataloader: train set dataloader.
         :param val_dataloader: validation set dataloader.
@@ -73,6 +77,7 @@ class ModelTrainer(object):
         :param metrics: list or func. default None. if given, then the message with print in the log message
         :param y_true: str. compute loss when train. {"input", "output}
             if "input", then use X to compute loss. else, use model output.
+        :param verbose_step: bool.
         :return:
         """
         metrics = metrics or []
@@ -80,12 +85,13 @@ class ModelTrainer(object):
             metrics = [metrics]
         for epoch in range(epochs):
             t0 = time.time()
-            train_loss = self.train_one_epoch(train_dataloader, y_true=y_true)
+            train_loss = self.train_one_epoch(train_dataloader, y_true=y_true, verbose_step=verbose_step)
             log_msg = f"Epoch: {epoch + 1}, train loss: {train_loss:.4f}"
             if val_dataloader is not None:
                 val_pred = self.predict(val_dataloader, has_label=True)
-                t_val_pred = torch.tensor(val_pred, dtype=torch.long, device=self.device)
-                val_loss = self.loss_fn(t_val_pred, val_dataloader.dataset.tensors[-1])
+                # t_val_pred = torch.tensor(val_pred, dtype=torch.long, device=self.device)
+                val_loss = self.loss_fn(*val_dataloader.dataset.tensors[:-1],
+                                        y_true=val_dataloader.dataset.tensors[-1]).item()
                 log_msg += f", val loss: {val_loss:.4f}"
                 if self.device == "cuda":
                     y_val = val_dataloader.dataset.tensors[-1].cpu()
