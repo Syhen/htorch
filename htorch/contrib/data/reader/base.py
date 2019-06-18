@@ -11,6 +11,10 @@ class BaseReader(object):
     def __init__(self):
         pass
 
+    @staticmethod
+    def read_line(line):
+        raise NotImplementedError()
+
     def read(self, filename):
         raise NotImplementedError()
 
