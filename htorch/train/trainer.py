@@ -34,11 +34,11 @@ class ModelTrainer(object):
         for x_batch in tqdm(dataloader, disable=not verbose_step):
             y_batch = x_batch[-1]
             x_batch = x_batch[:-1]
-            y_pred = self.model(*x_batch)
             self.optimizer.zero_grad()
             if y_true == "input":
                 loss = self.loss_fn(*x_batch, y_true=y_batch)
             else:
+                y_pred = self.model(*x_batch)
                 loss = self.loss_fn(y_pred, y_batch)
             loss.backward()
             if self.scheduler is not None:
