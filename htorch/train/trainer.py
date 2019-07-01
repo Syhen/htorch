@@ -36,7 +36,7 @@ class ModelTrainer(object):
             x_batch = x_batch[:-1]
             self.optimizer.zero_grad()
             if y_true == "input":
-                loss = self.loss_fn(*x_batch, y_true=y_batch)
+                loss = self.loss_fn(*x_batch, y_batch)
             else:
                 y_pred = self.model(*x_batch)
                 loss = self.loss_fn(y_pred, y_batch)
@@ -90,8 +90,12 @@ class ModelTrainer(object):
             if val_dataloader is not None:
                 val_pred = self.predict(val_dataloader, has_label=True)
                 # t_val_pred = torch.tensor(val_pred, dtype=torch.long, device=self.device)
-                val_loss = self.loss_fn(*val_dataloader.dataset.tensors[:-1],
-                                        y_true=val_dataloader.dataset.tensors[-1]).item()
+                if y_true == "input":
+                    val_loss = self.loss_fn(*val_dataloader.dataset.tensors[:-1],
+                                            val_dataloader.dataset.tensors[-1]).item()
+                else:
+                    val_loss = self.loss_fn(torch.tensor(val_pred, dtype=torch.float32, device=self.device),
+                                            val_dataloader.dataset.tensors[-1]).item()
                 log_msg += f", val loss: {val_loss:.4f}"
                 if self.device == "cuda":
                     y_val = val_dataloader.dataset.tensors[-1].cpu()
@@ -99,7 +103,10 @@ class ModelTrainer(object):
                     y_val = val_dataloader.dataset.tensors[-1]
                 y_val = y_val.detach().numpy()
                 for metric in metrics:
-                    metric_val = metric(y_pred=val_pred, y_true=y_val)
+                    val_pred_mid = val_pred.copy()
+                    if str(metric.__name__) in ("accuracy_score", "f1_score"):
+                        val_pred_mid = val_pred_mid.argmax(axis=1)
+                    metric_val = metric(y_pred=val_pred_mid, y_true=y_val)
                     log_msg += f", {metric.__name__}: {metric_val:.4f}"
             use_seconds = time.time() - t0
             log_msg += f", time: {use_seconds:.1f}"
